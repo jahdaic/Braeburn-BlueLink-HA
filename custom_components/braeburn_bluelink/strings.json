@@ -1,0 +1,20 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "description": "Sign in with your BlueLink Smart Connect account (the same email and password you use in the BlueLink app).",
+        "data": {
+          "username": "Email",
+          "password": "Password"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Invalid email or password.",
+      "cannot_connect": "Could not reach the BlueLink service."
+    },
+    "abort": {
+      "already_configured": "This BlueLink account is already configured."
+    }
+  }
+}

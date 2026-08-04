@@ -1,0 +1,176 @@
+"""Climate platform for Braeburn BlueLink thermostats."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from homeassistant.components.climate import (
+    ATTR_TARGET_TEMP_HIGH,
+    ATTR_TARGET_TEMP_LOW,
+    FAN_AUTO,
+    FAN_ON,
+    ClimateEntity,
+    ClimateEntityFeature,
+    HVACMode,
+)
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
+
+from .const import (
+    BL_TO_FAN,
+    BL_TO_HVAC,
+    DOMAIN,
+    FAN_CIRCULATE,
+    FAN_TO_BL,
+    FIELD_COOL_SP,
+    FIELD_CURRENT_TEMP,
+    FIELD_FAN,
+    FIELD_HEAT_SP,
+    FIELD_HUMIDITY,
+    FIELD_MODE,
+    HVAC_TO_BL,
+)
+from .coordinator import BlueLinkCoordinator
+
+
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    """Set up a climate entity per thermostat."""
+    coordinator: BlueLinkCoordinator = hass.data[DOMAIN][entry.entry_id]
+    async_add_entities(
+        BraeburnClimate(coordinator, dev["uuid"]) for dev in coordinator.data
+    )
+
+
+class BraeburnClimate(CoordinatorEntity[BlueLinkCoordinator], ClimateEntity):
+    """A Braeburn BlueLink thermostat as an HA climate entity."""
+
+    _attr_has_entity_name = True
+    _attr_name = None
+    _attr_temperature_unit = UnitOfTemperature.FAHRENHEIT
+    _attr_target_temperature_step = 1
+    _attr_hvac_modes = [
+        HVACMode.OFF,
+        HVACMode.HEAT,
+        HVACMode.COOL,
+        HVACMode.HEAT_COOL,
+    ]
+    _attr_fan_modes = [FAN_AUTO, FAN_ON, FAN_CIRCULATE]
+    _attr_supported_features = (
+        ClimateEntityFeature.TARGET_TEMPERATURE
+        | ClimateEntityFeature.TARGET_TEMPERATURE_RANGE
+        | ClimateEntityFeature.FAN_MODE
+        | ClimateEntityFeature.TURN_ON
+        | ClimateEntityFeature.TURN_OFF
+    )
+
+    def __init__(self, coordinator: BlueLinkCoordinator, uuid: str) -> None:
+        super().__init__(coordinator)
+        self._uuid = uuid
+        self._attr_unique_id = uuid
+
+    # --- helpers -----------------------------------------------------------
+    @property
+    def _device(self) -> dict[str, Any] | None:
+        for dev in self.coordinator.data or []:
+            if dev.get("uuid") == self._uuid:
+                return dev
+        return None
+
+    @property
+    def _state(self) -> dict[str, Any]:
+        dev = self._device
+        return dev.get("state_data", {}) if dev else {}
+
+    def _num(self, key: str) -> int | None:
+        try:
+            return int(self._state.get(key))
+        except (TypeError, ValueError):
+            return None
+
+    # --- entity metadata ---------------------------------------------------
+    @property
+    def device_info(self) -> DeviceInfo:
+        dev = self._device or {}
+        product = dev.get("product") or {}
+        return DeviceInfo(
+            identifiers={(DOMAIN, self._uuid)},
+            name=dev.get("name") or "Braeburn Thermostat",
+            manufacturer="Braeburn",
+            model=product.get("name"),
+            serial_number=dev.get("serial_number"),
+        )
+
+    @property
+    def available(self) -> bool:
+        dev = self._device
+        return bool(super().available and dev and dev.get("is_online"))
+
+    # --- readings ----------------------------------------------------------
+    @property
+    def current_temperature(self) -> float | None:
+        raw = self._num(FIELD_CURRENT_TEMP)
+        return raw / 100 if raw is not None else None
+
+    @property
+    def current_humidity(self) -> int | None:
+        raw = self._num(FIELD_HUMIDITY)
+        # 200 (and anything >= 100) means "no humidity sensor"
+        return raw if raw is not None and raw < 100 else None
+
+    @property
+    def hvac_mode(self) -> HVACMode | None:
+        return BL_TO_HVAC.get(self._num(FIELD_MODE))
+
+    @property
+    def fan_mode(self) -> str | None:
+        return BL_TO_FAN.get(self._num(FIELD_FAN))
+
+    @property
+    def target_temperature(self) -> int | None:
+        mode = self.hvac_mode
+        if mode == HVACMode.HEAT:
+            return self._num(FIELD_HEAT_SP)
+        if mode == HVACMode.COOL:
+            return self._num(FIELD_COOL_SP)
+        return None
+
+    @property
+    def target_temperature_low(self) -> int | None:
+        return self._num(FIELD_HEAT_SP)
+
+    @property
+    def target_temperature_high(self) -> int | None:
+        return self._num(FIELD_COOL_SP)
+
+    # --- control -----------------------------------------------------------
+    async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
+        bl = HVAC_TO_BL.get(hvac_mode)
+        if bl is not None:
+            await self.coordinator.async_set_attr(self._uuid, {FIELD_MODE: bl})
+
+    async def async_set_fan_mode(self, fan_mode: str) -> None:
+        bl = FAN_TO_BL.get(fan_mode)
+        if bl is not None:
+            await self.coordinator.async_set_attr(self._uuid, {FIELD_FAN: bl})
+
+    async def async_set_temperature(self, **kwargs: Any) -> None:
+        payload: dict[str, int] = {}
+        if (temp := kwargs.get(ATTR_TEMPERATURE)) is not None:
+            if self.hvac_mode == HVACMode.HEAT:
+                payload[FIELD_HEAT_SP] = int(temp)
+            elif self.hvac_mode == HVACMode.COOL:
+                payload[FIELD_COOL_SP] = int(temp)
+        if (low := kwargs.get(ATTR_TARGET_TEMP_LOW)) is not None:
+            payload[FIELD_HEAT_SP] = int(low)
+        if (high := kwargs.get(ATTR_TARGET_TEMP_HIGH)) is not None:
+            payload[FIELD_COOL_SP] = int(high)
+        if payload:
+            await self.coordinator.async_set_attr(self._uuid, payload)
