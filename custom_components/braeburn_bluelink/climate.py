@@ -5,8 +5,6 @@ from __future__ import annotations
 from typing import Any
 
 from homeassistant.components.climate import (
-    ATTR_TARGET_TEMP_HIGH,
-    ATTR_TARGET_TEMP_LOW,
     FAN_AUTO,
     FAN_ON,
     ClimateEntity,
@@ -56,16 +54,10 @@ class BraeburnClimate(CoordinatorEntity[BlueLinkCoordinator], ClimateEntity):
     _attr_name = None
     _attr_temperature_unit = UnitOfTemperature.FAHRENHEIT
     _attr_target_temperature_step = 1
-    _attr_hvac_modes = [
-        HVACMode.OFF,
-        HVACMode.HEAT,
-        HVACMode.COOL,
-        HVACMode.HEAT_COOL,
-    ]
+    _attr_hvac_modes = [HVACMode.OFF, HVACMode.HEAT, HVACMode.COOL]
     _attr_fan_modes = [FAN_AUTO, FAN_ON, FAN_CIRCULATE]
     _attr_supported_features = (
         ClimateEntityFeature.TARGET_TEMPERATURE
-        | ClimateEntityFeature.TARGET_TEMPERATURE_RANGE
         | ClimateEntityFeature.FAN_MODE
         | ClimateEntityFeature.TURN_ON
         | ClimateEntityFeature.TURN_OFF
@@ -110,8 +102,19 @@ class BraeburnClimate(CoordinatorEntity[BlueLinkCoordinator], ClimateEntity):
 
     @property
     def available(self) -> bool:
-        dev = self._device
-        return bool(super().available and dev and dev.get("is_online"))
+        # Available while the last poll succeeded and the device is present.
+        # BlueLink's is_online can briefly flip false as the thermostat re-checks
+        # in (e.g. right after a command), so we don't null the entity on it —
+        # it's surfaced as an attribute instead.
+        return bool(super().available and self._device is not None)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        dev = self._device or {}
+        return {
+            "is_online": dev.get("is_online"),
+            "last_seen": dev.get("last_seen"),
+        }
 
     # --- readings ----------------------------------------------------------
     @property
@@ -142,14 +145,6 @@ class BraeburnClimate(CoordinatorEntity[BlueLinkCoordinator], ClimateEntity):
             return self._num(FIELD_COOL_SP)
         return None
 
-    @property
-    def target_temperature_low(self) -> int | None:
-        return self._num(FIELD_HEAT_SP)
-
-    @property
-    def target_temperature_high(self) -> int | None:
-        return self._num(FIELD_COOL_SP)
-
     # --- control -----------------------------------------------------------
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         bl = HVAC_TO_BL.get(hvac_mode)
@@ -162,15 +157,14 @@ class BraeburnClimate(CoordinatorEntity[BlueLinkCoordinator], ClimateEntity):
             await self.coordinator.async_set_attr(self._uuid, {FIELD_FAN: bl})
 
     async def async_set_temperature(self, **kwargs: Any) -> None:
-        payload: dict[str, int] = {}
-        if (temp := kwargs.get(ATTR_TEMPERATURE)) is not None:
-            if self.hvac_mode == HVACMode.HEAT:
-                payload[FIELD_HEAT_SP] = int(temp)
-            elif self.hvac_mode == HVACMode.COOL:
-                payload[FIELD_COOL_SP] = int(temp)
-        if (low := kwargs.get(ATTR_TARGET_TEMP_LOW)) is not None:
-            payload[FIELD_HEAT_SP] = int(low)
-        if (high := kwargs.get(ATTR_TARGET_TEMP_HIGH)) is not None:
-            payload[FIELD_COOL_SP] = int(high)
-        if payload:
-            await self.coordinator.async_set_attr(self._uuid, payload)
+        temp = kwargs.get(ATTR_TEMPERATURE)
+        if temp is None:
+            return
+        if self.hvac_mode == HVACMode.HEAT:
+            await self.coordinator.async_set_attr(
+                self._uuid, {FIELD_HEAT_SP: int(temp)}
+            )
+        elif self.hvac_mode == HVACMode.COOL:
+            await self.coordinator.async_set_attr(
+                self._uuid, {FIELD_COOL_SP: int(temp)}
+            )

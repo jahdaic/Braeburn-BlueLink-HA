@@ -17,19 +17,17 @@ FIELD_FAN = "User_Setting_03"           # fan enum (below)
 FIELD_HUMIDITY = "Status_03"            # % RH (200 = no humidity sensor)
 
 # --- system mode enum (User_Setting_02) ---
-# HEAT/COOL are confirmed from the app bundle. AUTO/OFF are best-guess and should
-# be verified on a real unit: set each mode in the BlueLink app, then read
-# User_Setting_02 with ~/Scripts/bluelink_probe.sh. Update here if they differ.
-BL_MODE_AUTO = 0
+# Confirmed on a BRA7205: 0=OFF, 1=HEAT, 2=COOL. This model has no Auto/changeover
+# mode. Other Braeburn models may expose Auto (value unconfirmed — likely 3); if
+# yours does, add it here and to BL_TO_HVAC with HVACMode.HEAT_COOL.
+BL_MODE_OFF = 0
 BL_MODE_HEAT = 1
 BL_MODE_COOL = 2
-BL_MODE_OFF = 3  # TODO: confirm
 
 BL_TO_HVAC: dict[int, HVACMode] = {
     BL_MODE_OFF: HVACMode.OFF,
     BL_MODE_HEAT: HVACMode.HEAT,
     BL_MODE_COOL: HVACMode.COOL,
-    BL_MODE_AUTO: HVACMode.HEAT_COOL,
 }
 HVAC_TO_BL: dict[HVACMode, int] = {v: k for k, v in BL_TO_HVAC.items()}
 

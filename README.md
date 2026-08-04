@@ -36,10 +36,10 @@ directory, restart, then add the integration as above.
 ## Notes & limitations
 
 - **Cloud polling** (default every 120 s). Braeburn has no documented local API.
-- **Mode values:** `heat` and `cool` are confirmed; `auto` and `off` are best-guess defaults that
-  may differ per model. If your thermostat's Off/Auto don't behave, set each mode in the BlueLink
-  app and read back `User_Setting_02` (see the probe script referenced in the docs), then adjust
-  the values in `const.py` and open an issue/PR with your findings.
+- **Mode values:** Off/Heat/Cool are confirmed on a **BRA7205** (`User_Setting_02` = `0`/`1`/`2`).
+  That model has **no Auto/changeover** mode. Other Braeburn models may expose Auto (value
+  unconfirmed) — if yours does, add it in `const.py` (`BL_TO_HVAC` → `HVACMode.HEAT_COOL`) and a
+  PR with your findings is welcome.
 - Temperatures are handled in **°F** (matching the BlueLink API); HA will convert for display.
 
 ## How it works
