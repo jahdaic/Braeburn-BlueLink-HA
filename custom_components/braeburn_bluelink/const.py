@@ -15,6 +15,8 @@ FIELD_COOL_SP = "User_Setting_05"       # °F
 FIELD_MODE = "User_Setting_02"          # system mode enum (below)
 FIELD_FAN = "User_Setting_03"           # fan enum (below)
 FIELD_HUMIDITY = "Status_03"            # % RH (200 = no humidity sensor)
+FIELD_RELAYS = "Status_07"              # equipment/relay bitfield; all-zeros = idle,
+                                        # any active bit = system currently running
 
 # --- system mode enum (User_Setting_02) ---
 # Confirmed on a BRA7205: 0=OFF, 1=HEAT, 2=COOL. This model has no Auto/changeover

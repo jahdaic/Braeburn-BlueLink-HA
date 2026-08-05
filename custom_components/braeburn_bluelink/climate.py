@@ -9,6 +9,7 @@ from homeassistant.components.climate import (
     FAN_ON,
     ClimateEntity,
     ClimateEntityFeature,
+    HVACAction,
     HVACMode,
 )
 from homeassistant.config_entries import ConfigEntry
@@ -30,6 +31,7 @@ from .const import (
     FIELD_HEAT_SP,
     FIELD_HUMIDITY,
     FIELD_MODE,
+    FIELD_RELAYS,
     HVAC_TO_BL,
 )
 from .coordinator import BlueLinkCoordinator
@@ -131,6 +133,25 @@ class BraeburnClimate(CoordinatorEntity[BlueLinkCoordinator], ClimateEntity):
     @property
     def hvac_mode(self) -> HVACMode | None:
         return BL_TO_HVAC.get(self._num(FIELD_MODE))
+
+    @property
+    def hvac_action(self) -> HVACAction | None:
+        mode = self.hvac_mode
+        if mode == HVACMode.OFF:
+            return HVACAction.OFF
+        # Status_07 is the equipment/relay bitfield: all-zeros => idle, any active
+        # bit => the system is running. Bit positions (compressor/fan/heat stages)
+        # aren't individually mapped, so we use the mode to pick heating vs cooling.
+        # (A continuously-on fan could read as "running"; refine if that proves noisy.)
+        relays = str(self._state.get(FIELD_RELAYS, ""))
+        running = bool(relays) and set(relays) != {"0"}
+        if not running:
+            return HVACAction.IDLE
+        if mode == HVACMode.COOL:
+            return HVACAction.COOLING
+        if mode == HVACMode.HEAT:
+            return HVACAction.HEATING
+        return HVACAction.IDLE
 
     @property
     def fan_mode(self) -> str | None:

@@ -10,8 +10,8 @@ read and control, using the same cloud API as the BlueLink app.
 ## Features
 
 - Auto-discovers the thermostats on your BlueLink account
-- **Reads:** current temperature, heat/cool setpoints, mode, fan mode, humidity (if the unit has a
-  sensor), online status
+- **Reads:** current temperature, heat/cool setpoints, mode, **current action** (heating / cooling /
+  idle), fan mode, humidity (if the unit has a sensor), online status
 - **Controls:** HVAC mode, heat/cool setpoints, fan mode
 - Simple UI setup (email + password) — no YAML
 
