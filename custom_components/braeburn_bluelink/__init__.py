@@ -11,7 +11,7 @@ from .api import BlueLinkClient
 from .const import DOMAIN
 from .coordinator import BlueLinkCoordinator
 
-PLATFORMS: list[Platform] = [Platform.CLIMATE]
+PLATFORMS: list[Platform] = [Platform.CLIMATE, Platform.SENSOR]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

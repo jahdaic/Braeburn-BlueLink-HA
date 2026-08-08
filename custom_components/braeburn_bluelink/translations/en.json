@@ -16,5 +16,11 @@
     "abort": {
       "already_configured": "This BlueLink account is already configured."
     }
+  },
+  "entity": {
+    "sensor": {
+      "current_temperature": { "name": "Temperature" },
+      "current_humidity": { "name": "Humidity" }
+    }
   }
 }
